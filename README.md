@@ -19,5 +19,10 @@ A fast reconnaissance tool for detecting Subdomain Takeover vulnerabilities.
 - **Features**: Analyzes HTTP response bodies against a signature database (fingerprints) of known cloud providers (AWS S3, GitHub Pages, Heroku, etc.) to detect dangling DNS records.
 - **Usage**: `node ECHO_TAKEOVER_SCANNER.js` (Requires `domains.txt`)
 
+### 4. Vanguard DNS Resolver (`VANGUARD_DNS_RESOLVER.js`)
+An advanced, asynchronous DNS brute-forcing engine designed to map active subdomains and resolve IP/CNAME metadata.
+- **Features**: Queries external DNS resolvers (Cloudflare/Google) in parallel without using local OS cache. Exposes CNAME mappings for Subdomain Takeover checks.
+- **Usage**: `node VANGUARD_DNS_RESOLVER.js` (Requires `subdomains.txt`)
+
 ---
 *Disclaimer: This repository is for educational purposes and authorized bug bounty hunting only. Do not use against targets without explicit permission.*
