@@ -1,112 +1,254 @@
 /**
- * VANGUARD DNS RESOLVER v1.0
- * --------------------------------------------------------------
- * Alat pengintai Asynchronous untuk memetakan subdomain aktif 
- * melalui teknik DNS Brute-forcing secara lokal.
- * 
- * Mekanisme:
- * Menggabungkan nama domain target dengan daftar subdomain (wordlist).
- * Menggunakan resolver DNS kustom secara asinkron untuk mencocokkan
- * alamat IP (A Record) dan melihat rekaman alias (CNAME Record).
- * 
- * Sangat berguna untuk:
- * 1. Mengidentifikasi mesin/server yang aktif secara diam-diam.
- * 2. Menemukan alias CNAME untuk analisis Subdomain Takeover lebih lanjut.
+ * VANGUARD DNS RESOLVER v2.0 — Asynchronous Subdomain Enumeration Engine
+ * ========================================================================
+ * Maps active subdomains via high-speed DNS brute-forcing.
+ *
+ * Features:
+ *  - CLI argument parsing
+ *  - Wildcard DNS detection (avoids false positives from catch-all records)
+ *  - Multi-record resolution (A, AAAA, CNAME, MX, TXT)
+ *  - Custom DNS resolver selection (bypass local cache)
+ *  - Controlled concurrency
+ *  - JSON + Console dual output
+ *  - Progress tracking with req/s metrics
+ *
+ * Usage:
+ *   node VANGUARD_DNS_RESOLVER.js -d example.com -w subdomains.txt
+ *   node VANGUARD_DNS_RESOLVER.js -d example.com -w subdomains.txt -c 200 -o dns_results.json
  */
 
 const fs = require('fs');
 const readline = require('readline');
 const dns = require('dns').promises;
 
-const CONFIG = {
-    TARGET_DOMAIN: 'example.com', // Ganti dengan domain target Anda
-    SUBDOMAINS_WORDLIST: './subdomains.txt',
-    CONCURRENCY: 100, // Jumlah DNS query paralel
-    DNS_SERVERS: ['1.1.1.1', '8.8.8.8'], // Menggunakan DNS Cloudflare & Google untuk menghindari cache lokal
-    TIMEOUT_MS: 3000
-};
+// ============================================================================
+// 1. CLI ARGUMENT PARSER
+// ============================================================================
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const config = {
+        targetDomain: '',
+        wordlistPath: './subdomains.txt',
+        concurrency: 100,
+        dnsServers: ['1.1.1.1', '8.8.8.8', '9.9.9.9'],
+        outputFile: '',
+        resolveAll: false, // Also resolve AAAA, MX, TXT
+    };
 
-// Konfigurasi Resolver DNS kustom
+    for (let i = 0; i < args.length; i++) {
+        switch (args[i]) {
+            case '-d': case '--domain':      config.targetDomain = args[++i]; break;
+            case '-w': case '--wordlist':    config.wordlistPath = args[++i]; break;
+            case '-c': case '--concurrency': config.concurrency = parseInt(args[++i], 10); break;
+            case '-o': case '--output':      config.outputFile = args[++i]; break;
+            case '-a': case '--all-records': config.resolveAll = true; break;
+            case '--dns':                    config.dnsServers = args[++i].split(','); break;
+            case '-h': case '--help':        printUsage(); process.exit(0);
+            default: break;
+        }
+    }
+
+    if (!config.targetDomain) {
+        printUsage();
+        process.exit(1);
+    }
+    return config;
+}
+
+function printUsage() {
+    console.log(`
+  VANGUARD DNS RESOLVER v2.0
+
+  Usage:
+    node VANGUARD_DNS_RESOLVER.js -d <target_domain> [options]
+
+  Required:
+    -d, --domain       Target domain to enumerate (e.g., example.com)
+
+  Optional:
+    -w, --wordlist     Path to subdomain wordlist (default: ./subdomains.txt)
+    -c, --concurrency  Parallel DNS queries (default: 100)
+    -o, --output       Save results to JSON file
+    -a, --all-records  Also resolve AAAA, MX, TXT records
+    --dns              Custom DNS servers, comma-separated (default: 1.1.1.1,8.8.8.8,9.9.9.9)
+    -h, --help         Show this help message
+
+  Examples:
+    node VANGUARD_DNS_RESOLVER.js -d target.com -w subdomains.txt
+    node VANGUARD_DNS_RESOLVER.js -d target.com -w big_list.txt -c 200 -a -o results.json
+`);
+}
+
+// ============================================================================
+// 2. DNS ENGINE — Custom resolver with multi-record support
+// ============================================================================
 const resolver = new dns.Resolver();
-resolver.setServers(CONFIG.DNS_SERVERS);
 
-async function resolveSubdomain(subdomain) {
-    const target = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
-    
+async function resolveRecord(fqdn, type) {
     try {
-        // Cek CNAME Record terlebih dahulu (penting untuk deteksi Subdomain Takeover)
-        let cnames = [];
-        try {
-            cnames = await resolver.resolveCname(target);
-        } catch (e) {
-            // Abaikan jika tidak ada record CNAME
+        switch (type) {
+            case 'A':     return await resolver.resolve4(fqdn);
+            case 'AAAA':  return await resolver.resolve6(fqdn);
+            case 'CNAME': return await resolver.resolveCname(fqdn);
+            case 'MX':    return (await resolver.resolveMx(fqdn)).map(r => `${r.exchange}:${r.priority}`);
+            case 'TXT':   return (await resolver.resolveTxt(fqdn)).map(r => r.join(''));
+            default:      return [];
         }
-
-        // Cek A Record (IP Address)
-        const addresses = await resolver.resolve4(target);
-        
-        if (addresses && addresses.length > 0) {
-            console.log(`\n[+] Active Subdomain: ${target}`);
-            console.log(`    └─ IP Address(es) : ${addresses.join(', ')}`);
-            if (cnames.length > 0) {
-                console.log(`    └─ CNAME Alias    : ${cnames.join(', ')}`);
-            }
-        }
-    } catch (err) {
-        // Gagal resolve berarti subdomain tidak aktif/tidak ada
+    } catch {
+        return [];
     }
 }
 
-async function startDNSResolver() {
-    console.log(`=========================================`);
-    console.log(`🚀 VANGUARD DNS RESOLVER INITIALIZED`);
-    console.log(`🎯 Target Domain : ${CONFIG.TARGET_DOMAIN}`);
-    console.log(`⚙️  DNS Servers   : ${CONFIG.DNS_SERVERS.join(', ')}`);
-    console.log(`⚡ Concurrency   : ${CONFIG.CONCURRENCY} parallel queries`);
-    console.log(`=========================================\n`);
+async function resolveSubdomain(subdomain, targetDomain, config, wildcardIPs) {
+    const fqdn = `${subdomain}.${targetDomain}`;
 
-    if (!fs.existsSync(CONFIG.SUBDOMAINS_WORDLIST)) {
-        console.error(`[-] File ${CONFIG.SUBDOMAINS_WORDLIST} tidak ditemukan.`);
-        console.log(`[!] Silakan buat file subdomains.txt yang berisi daftar kata (contoh: dev, staging, api, admin).`);
-        return;
+    // Primary: Resolve A record
+    const ipv4 = await resolveRecord(fqdn, 'A');
+    if (ipv4.length === 0) return null;
+
+    // Wildcard filter: If all IPs match wildcard, it's a false positive
+    if (wildcardIPs.size > 0) {
+        const allWildcard = ipv4.every(ip => wildcardIPs.has(ip));
+        if (allWildcard) return null;
     }
 
-    const rl = readline.createInterface({ input: fs.createReadStream(CONFIG.SUBDOMAINS_WORDLIST) });
+    const result = {
+        subdomain: fqdn,
+        A: ipv4,
+    };
+
+    // CNAME (always useful for takeover analysis)
+    const cnames = await resolveRecord(fqdn, 'CNAME');
+    if (cnames.length > 0) result.CNAME = cnames;
+
+    // Extended records (if requested)
+    if (config.resolveAll) {
+        const ipv6 = await resolveRecord(fqdn, 'AAAA');
+        if (ipv6.length > 0) result.AAAA = ipv6;
+
+        const mx = await resolveRecord(fqdn, 'MX');
+        if (mx.length > 0) result.MX = mx;
+
+        const txt = await resolveRecord(fqdn, 'TXT');
+        if (txt.length > 0) result.TXT = txt;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// 3. WILDCARD DETECTION — Prevents false positives
+// ============================================================================
+async function detectWildcard(targetDomain) {
+    const randomSubs = [
+        `zzz-nonexistent-${Date.now()}-aaa`,
+        `xxx-ghost-${Date.now()}-bbb`,
+        `qqq-phantom-${Date.now()}-ccc`,
+    ];
+
+    const wildcardIPs = new Set();
+
+    for (const sub of randomSubs) {
+        const ips = await resolveRecord(`${sub}.${targetDomain}`, 'A');
+        ips.forEach(ip => wildcardIPs.add(ip));
+    }
+
+    return wildcardIPs;
+}
+
+// ============================================================================
+// 4. CORE ENGINE
+// ============================================================================
+async function startResolver() {
+    const config = parseArgs();
+    resolver.setServers(config.dnsServers);
+
+    const results = [];
+    const startTime = Date.now();
+
+    console.log(`\n  ╔══════════════════════════════════════════════╗`);
+    console.log(`  ║   ⚡ VANGUARD DNS RESOLVER v2.0              ║`);
+    console.log(`  ╠══════════════════════════════════════════════╣`);
+    console.log(`  ║  Target      : ${config.targetDomain.padEnd(29)}║`);
+    console.log(`  ║  Wordlist    : ${config.wordlistPath.padEnd(29)}║`);
+    console.log(`  ║  Concurrency : ${String(config.concurrency).padEnd(29)}║`);
+    console.log(`  ║  DNS Servers : ${config.dnsServers.join(', ').padEnd(29)}║`);
+    console.log(`  ╚══════════════════════════════════════════════╝\n`);
+
+    if (!fs.existsSync(config.wordlistPath)) {
+        console.error(`  [!] Wordlist not found: ${config.wordlistPath}`);
+        process.exit(1);
+    }
+
+    // Step 1: Wildcard detection
+    console.log(`  [*] Detecting wildcard DNS records...`);
+    const wildcardIPs = await detectWildcard(config.targetDomain);
+    if (wildcardIPs.size > 0) {
+        console.log(`  [!] Wildcard DNS detected: ${[...wildcardIPs].join(', ')}`);
+        console.log(`  [*] These IPs will be filtered from results to avoid false positives.\n`);
+    } else {
+        console.log(`  [✓] No wildcard DNS detected. Proceeding with clean resolution.\n`);
+    }
+
+    // Step 2: Stream wordlist and resolve
+    const rl = readline.createInterface({ input: fs.createReadStream(config.wordlistPath), crlfDelay: Infinity });
     let activeQueries = 0;
-    let queue = [];
     let isEOF = false;
+    let queue = [];
     let totalProcessed = 0;
+    let totalFound = 0;
 
     return new Promise((resolve) => {
-        const processQueue = async () => {
-            while (queue.length > 0 && activeQueries < CONFIG.CONCURRENCY) {
+        const processQueue = () => {
+            while (queue.length > 0 && activeQueries < config.concurrency) {
                 const sub = queue.shift();
                 activeQueries++;
-                
-                resolveSubdomain(sub).then(() => {
+
+                resolveSubdomain(sub, config.targetDomain, config, wildcardIPs).then((result) => {
+                    if (result) {
+                        totalFound++;
+                        results.push(result);
+
+                        console.log(`  [+] ${result.subdomain}`);
+                        console.log(`      └─ A     : ${result.A.join(', ')}`);
+                        if (result.CNAME) console.log(`      └─ CNAME : ${result.CNAME.join(', ')}`);
+                        if (result.AAAA)  console.log(`      └─ AAAA  : ${result.AAAA.join(', ')}`);
+                        if (result.MX)    console.log(`      └─ MX    : ${result.MX.join(', ')}`);
+                        if (result.TXT)   console.log(`      └─ TXT   : ${result.TXT.join(' | ').substring(0, 80)}`);
+                    }
+
                     activeQueries--;
                     totalProcessed++;
-                    
-                    if (totalProcessed % 100 === 0) {
-                        process.stdout.write(`\r[*] Processed: ${totalProcessed} subdomains...`);
+
+                    if (totalProcessed % 200 === 0) {
+                        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                        const qps = (totalProcessed / (elapsed || 1)).toFixed(0);
+                        process.stdout.write(`\r  [*] ${totalProcessed} queried | ${totalFound} found | ${qps} q/s | ${elapsed}s`);
                     }
-                    
+
                     processQueue();
                 });
             }
 
             if (isEOF && activeQueries === 0 && queue.length === 0) {
-                console.log(`\n\n✅ DNS Resolution Completed. Total queried: ${totalProcessed}`);
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                const qps = (totalProcessed / (elapsed || 1)).toFixed(0);
+                console.log(`\n\n  ✅ Resolution complete: ${totalProcessed} queried | ${totalFound} active subdomains | ${qps} q/s | ${elapsed}s`);
+
+                if (config.outputFile && results.length > 0) {
+                    fs.writeFileSync(config.outputFile, JSON.stringify(results, null, 2));
+                    console.log(`  📄 Results saved to: ${config.outputFile}`);
+                }
+
                 resolve();
             }
         };
 
         rl.on('line', (line) => {
-            if (line.trim() !== '') {
-                queue.push(line.trim());
-                if (activeQueries < CONFIG.CONCURRENCY) {
-                    processQueue();
-                }
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                queue.push(trimmed);
+                processQueue();
             }
         });
 
@@ -117,4 +259,4 @@ async function startDNSResolver() {
     });
 }
 
-startDNSResolver();
+startResolver();
