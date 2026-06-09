@@ -25,4 +25,16 @@ An advanced, asynchronous DNS brute-forcing engine designed to map active subdom
 - **Usage**: `node VANGUARD_DNS_RESOLVER.js` (Requires `subdomains.txt`)
 
 ---
+
+## Defensive Engineering & Detection
+
+To counter automated reconnaissance and scanning, you should implement defensive measures at the server and firewall levels. This repository provides boilerplate configurations under the `detection/` directory:
+
+### 1. Fail2ban Rule (`detection/fail2ban_scanner_protection.conf`)
+An automated log analyzer configuration that monitors web access logs and issues a firewall ban (IP tables) when aggressive directory scanning behavior is detected.
+
+### 2. ModSecurity WAF Rules (`detection/modsecurity_waf_rules.conf`)
+Web Application Firewall (WAF) rule definitions designed to drop requests with automated scanner User-Agent signatures and access attempts targeting configuration files.
+
+---
 *Disclaimer: This repository is for educational purposes and authorized bug bounty hunting only. Do not use against targets without explicit permission.*
