@@ -2,119 +2,221 @@
 
 > **A high-performance, asynchronous security auditing and defensive engineering suite built entirely in pure Node.js with zero external dependencies.**
 
-This repository contains a comprehensive set of advanced tools designed for scanning hidden endpoints, identifying CORS misconfigurations, detecting subdomain takeovers, and performing fast DNS enumeration, alongside robust configurations to defend against these scan techniques.
-
 ---
 
-## 📂 Project Directory Structure
+## 📂 Repository Structure
 
 ```
 Automated-Recon-Suite/
 │
-├── README.md                           # Main documentation (this file)
+├── README.md
 │
-├── GHOST_ENGINE_ADVANCED.js           # Directory and API endpoint scanner
-├── SPECTER_CORS_SCANNER.js             # Multi-vector CORS vulnerability detector
-├── ECHO_TAKEOVER_SCANNER.js            # Subdomain takeover analyzer (DNS-first)
-├── VANGUARD_DNS_RESOLVER.js            # DNS brute-forcing & wildcard filter engine
+├── scanners/                          # All offensive scanning tools
+│   ├── ghost-engine.js                # Directory & config leak scanner
+│   ├── specter-cors.js                # Multi-vector CORS misconfiguration detector
+│   ├── echo-takeover.js               # Subdomain takeover analyzer (DNS-first)
+│   └── vanguard-dns.js                # DNS brute-forcing & wildcard filter engine
 │
-├── wordlist.txt                        # Fuzzing wordlist (200+ sensitive paths)
-├── domains.txt                         # Target lists for CORS/Takeover scanners (500+ dummy domains)
-├── subdomains.txt                      # Subdomain enumeration wordlist (~500+ entries)
+├── wordlists/                         # Input data files for scanners
+│   ├── paths.txt                      # 200+ sensitive file/directory paths
+│   ├── domains.txt                    # 500 sample target domains
+│   └── subdomains.txt                 # 500+ common subdomain prefixes
 │
-└── detection/                          # Defensive engineering & protection rules
-    ├── fail2ban_scanner_protection.conf # Log analysis & automatic firewall ban rule
-    ├── modsecurity_waf_rules.conf      # ModSecurity WAF rules (User-Agent & path blocks)
-    └── rate_limiter.js                 # In-memory Token Bucket rate limiting middleware
+└── detection/                         # Defensive configs & middleware
+    ├── fail2ban_scanner_protection.conf
+    ├── modsecurity_waf_rules.conf
+    └── rate_limiter.js
 ```
 
 ---
 
 ## ⚔️ Offensive Scanners
 
-All offensive tools leverage connection pooling (`Keep-Alive`), concurrent execution tracking (semaphores), exponential backoff on retry, and non-blocking streaming I/O.
-
-### 1. Ghost Engine v2.0 (`GHOST_ENGINE_ADVANCED.js`)
-An advanced directory fuzzer and configuration leak scanner with intelligent response matchers.
-- **Features:** Matches headers/bodies for exposed database credentials, config files, AWS keys, git directories, stack traces, and Spring Boot Actuator endpoints.
-- **Usage:**
-  ```bash
-  node GHOST_ENGINE_ADVANCED.js -u https://example.com -w wordlist.txt -c 50 -o results.json
-  ```
-- **CLI Options:**
-  - `-u, --url` : Base target URL (required)
-  - `-w, --wordlist` : Path to paths wordlist
-  - `-c, --concurrency` : Max parallel requests
-  - `-fs, --filter-size` : Skip responses of a specific byte length (bypasses custom 404s)
-
-### 2. Specter CORS Scanner v2.0 (`SPECTER_CORS_SCANNER.js`)
-An active scanner targeting Cross-Origin Resource Sharing (CORS) misconfigurations.
-- **Features:** Tests domains against reflected origin injection, subdomain trusts, and null origin vectors. Validates preflight responses with `OPTIONS` queries.
-- **Usage:**
-  ```bash
-  node SPECTER_CORS_SCANNER.js -l domains.txt -c 30 -o cors_results.json
-  ```
-
-### 3. Echo Takeover Scanner v2.0 (`ECHO_TAKEOVER_SCANNER.js`)
-A subdomain takeover detection tool relying on DNS-first validation.
-- **Features:** Performs DNS resolution of CNAME records *before* sending HTTP requests to minimize noise. Checks responses against a database of 21 known cloud providers.
-- **Usage:**
-  ```bash
-  node ECHO_TAKEOVER_SCANNER.js -l domains.txt -c 30 -o takeover_results.json
-  ```
-
-### 4. Vanguard DNS Resolver v2.0 (`VANGUARD_DNS_RESOLVER.js`)
-A high-speed subdomain mapper utilizing DNS brute-forcing.
-- **Features:** Automatically detects wildcard DNS records and filters them out to prevent false positives. Resolves multiple record types (A, CNAME, AAAA, MX, TXT).
-- **Usage:**
-  ```bash
-  node VANGUARD_DNS_RESOLVER.js -d example.com -w subdomains.txt -c 100 -a -o dns_results.json
-  ```
+All scanners share the same architectural foundation:
+- **Zero external dependencies** — only Node.js built-in modules
+- **TCP connection pooling** via `Keep-Alive` agents
+- **Controlled concurrency** — semaphore-based queue prevents RAM exhaustion
+- **Exponential backoff retry** on timeout/connection errors
+- **Streamed I/O** — wordlists are read line-by-line, never loaded into memory
+- **Dual output** — real-time console + optional JSON file (`-o`)
 
 ---
 
-## 🛡️ Defensive Engineering & Detection
+### 1. Ghost Engine v2.0
 
-Located inside the `detection/` directory, these configurations mitigate automated reconnaissance scans.
+**File:** `scanners/ghost-engine.js`
+**Purpose:** Fuzz target URLs with a wordlist to discover hidden files, exposed configurations, and leaked credentials.
 
-### 1. Fail2ban Rule (`detection/fail2ban_scanner_protection.conf`)
-- **Vulnerability Blocked:** Directory scanning / Fuzzing.
-- **Mechanics:** Monitors web server access logs (like Nginx) via regex. Identifies repeated attempts to access configuration paths (like `.env` or `.git`) and instructs `iptables` to issue a temporary or permanent IP ban.
+**Matchers (8 built-in):**
+| Severity | Detects |
+|---|---|
+| CRITICAL | `.env` secrets, AWS keys, database credentials, Git config |
+| HIGH | Directory listings, stack traces, Spring Actuator, PHPInfo |
+| MEDIUM | Swagger/OpenAPI documentation |
+| LOW | Login/admin panels |
 
-### 2. ModSecurity WAF Rules (`detection/modsecurity_waf_rules.conf`)
-- **Vulnerability Blocked:** Scanning tools, directory traversal, Cloud SSRF attempts.
-- **Mechanics:** Checks incoming HTTP request headers and URIs. Rejects traffic displaying signatures of fuzzing tools or matching known SSRF targets (such as AWS Instance Metadata endpoints).
+**Usage:**
+```bash
+node scanners/ghost-engine.js -u https://target.com -w wordlists/paths.txt
+node scanners/ghost-engine.js -u https://target.com -w wordlists/paths.txt -c 100 -o results.json
+node scanners/ghost-engine.js -u https://target.com -w wordlists/paths.txt -fs 1234  # filter custom 404 by size
+```
 
-### 3. In-Memory Token Bucket Rate Limiter (`detection/rate_limiter.js`)
-- **Vulnerability Blocked:** High-frequency automated attacks / Denial of Service.
-- **Mechanics:** An in-memory middleware that throttles IP addresses based on the Token Bucket algorithm. 
-- **Setup:** Import directly into Express.js:
-  ```javascript
-  const rateLimiter = require('./detection/rate_limiter');
-  app.use(rateLimiter);
-  ```
+**All flags:**
+| Flag | Description | Default |
+|---|---|---|
+| `-u, --url` | Target base URL | *(required)* |
+| `-w, --wordlist` | Wordlist file path | `./wordlists/paths.txt` |
+| `-c, --concurrency` | Parallel requests | `50` |
+| `-t, --timeout` | Timeout per request (ms) | `8000` |
+| `-r, --retries` | Max retries per request | `2` |
+| `-fs, --filter-size` | Ignore responses of this exact byte size | *disabled* |
+| `-o, --output` | Save findings to JSON file | *disabled* |
+
+---
+
+### 2. Specter CORS Scanner v2.0
+
+**File:** `scanners/specter-cors.js`
+**Purpose:** Detect Cross-Origin Resource Sharing misconfigurations that allow cross-domain data theft.
+
+**Test vectors (per domain):**
+1. Reflected arbitrary origin (`https://evil-attacker.com`)
+2. Subdomain trust (`https://evil.target.com`)
+3. Null origin injection (`null`)
+4. Preflight `OPTIONS` with `Access-Control-Request-Method: PUT`
+
+**Severity classification:**
+| Severity | Condition |
+|---|---|
+| CRITICAL | Reflected origin + `Access-Control-Allow-Credentials: true` |
+| CRITICAL | Null origin + credentials |
+| HIGH | Reflected origin without credentials |
+| HIGH | Wildcard `*` + credentials (misconfigured) |
+
+**Usage:**
+```bash
+node scanners/specter-cors.js -l wordlists/domains.txt
+node scanners/specter-cors.js -l wordlists/domains.txt -c 50 -o cors_results.json
+```
+
+**All flags:**
+| Flag | Description | Default |
+|---|---|---|
+| `-l, --list` | Domain list file | `./wordlists/domains.txt` |
+| `-c, --concurrency` | Parallel requests | `30` |
+| `-t, --timeout` | Timeout per request (ms) | `8000` |
+| `-o, --output` | Save findings to JSON file | *disabled* |
 
 ---
 
-## 🔄 Recommended Auditing Workflow
+### 3. Echo Takeover Scanner v2.0
 
-1. **Phase 1: Subdomain Discovery**
-   ```bash
-   node VANGUARD_DNS_RESOLVER.js -d target.com -w subdomains.txt -o active_subs.json
-   ```
-2. **Phase 2: Subdomain Takeover Analysis**
-   Extract domain list from output and check for takeover:
-   ```bash
-   node ECHO_TAKEOVER_SCANNER.js -l resolved_domains.txt -o takeover_vulns.json
-   ```
-3. **Phase 3: CORS Configuration Auditing**
-   ```bash
-   node SPECTER_CORS_SCANNER.js -l resolved_domains.txt -o cors_vulns.json
-   ```
-4. **Phase 4: Endpoint and Configuration Fuzzing**
-   ```bash
-   node GHOST_ENGINE_ADVANCED.js -u https://api.target.com -w wordlist.txt -o leaks.json
-   ```
+**File:** `scanners/echo-takeover.js`
+**Purpose:** Identify subdomains with dangling CNAME records pointing to deprovisioned cloud services.
+
+**How it works:**
+1. Resolves DNS CNAME record for each domain
+2. Matches CNAME against known cloud provider patterns
+3. Only sends HTTP requests if CNAME matches — drastically reduces noise
+4. Checks response body for takeover-confirming error messages
+
+**Fingerprint database (21 providers):**
+AWS S3, CloudFront, Elastic Beanstalk · Azure Websites, Traffic Manager, Blob · Google Cloud Storage · Heroku · GitHub Pages · GitLab Pages · Shopify · Tumblr · WordPress.com · Pantheon · Surge.sh · Fastly · Fly.io · Netlify · Vercel · Render · Zendesk
+
+**Usage:**
+```bash
+node scanners/echo-takeover.js -l wordlists/domains.txt
+node scanners/echo-takeover.js -l wordlists/domains.txt -c 50 -o takeover_results.json
+```
+
+**All flags:**
+| Flag | Description | Default |
+|---|---|---|
+| `-l, --list` | Domain list file | `./wordlists/domains.txt` |
+| `-c, --concurrency` | Parallel checks | `30` |
+| `-t, --timeout` | Timeout per request (ms) | `8000` |
+| `-o, --output` | Save findings to JSON file | *disabled* |
 
 ---
-*Disclaimer: This repository is created for educational purposes and authorized auditing only. Unauthorized scanning of external targets is strictly prohibited.*
+
+### 4. Vanguard DNS Resolver v2.0
+
+**File:** `scanners/vanguard-dns.js`
+**Purpose:** Enumerate active subdomains via high-speed DNS brute-forcing with automatic false-positive filtering.
+
+**Key feature — Wildcard Detection:**
+Before scanning begins, the tool queries 3 random non-existent subdomains. If they all resolve to the same IP, that IP is flagged as a wildcard and automatically filtered from results.
+
+**Record types resolved:**
+| Record | Always | With `-a` flag |
+|---|---|---|
+| A (IPv4) | ✅ | ✅ |
+| CNAME | ✅ | ✅ |
+| AAAA (IPv6) | ❌ | ✅ |
+| MX | ❌ | ✅ |
+| TXT | ❌ | ✅ |
+
+**Usage:**
+```bash
+node scanners/vanguard-dns.js -d target.com -w wordlists/subdomains.txt
+node scanners/vanguard-dns.js -d target.com -w wordlists/subdomains.txt -c 200 -a -o dns_results.json
+```
+
+**All flags:**
+| Flag | Description | Default |
+|---|---|---|
+| `-d, --domain` | Target domain | *(required)* |
+| `-w, --wordlist` | Subdomain wordlist | `./wordlists/subdomains.txt` |
+| `-c, --concurrency` | Parallel DNS queries | `100` |
+| `-a, --all-records` | Also resolve AAAA, MX, TXT | *disabled* |
+| `--dns` | Custom DNS servers (comma-separated) | `1.1.1.1,8.8.8.8,9.9.9.9` |
+| `-o, --output` | Save results to JSON file | *disabled* |
+
+---
+
+## 🛡️ Defensive Engineering
+
+Configurations to detect and block the exact scanning techniques implemented above.
+
+### 1. Fail2ban (`detection/fail2ban_scanner_protection.conf`)
+Monitors Nginx/Apache access logs for repeated requests to sensitive paths (`.env`, `.git`, `.sql`, `.zip`, `actuator/*`, `swagger*`). Bans offending IPs via `iptables` after 3 hits within 60 seconds.
+
+### 2. ModSecurity WAF (`detection/modsecurity_waf_rules.conf`)
+Three rules:
+- **Rule 1000001:** Blocks requests with known scanner User-Agent strings (`sqlmap`, `nuclei`, `nikto`, `ffuf`)
+- **Rule 1000002:** Blocks direct access to sensitive file extensions (`.env`, `.git`, `.bak`, `.sql`, `.zip`)
+- **Rule 1000003:** Blocks SSRF attempts targeting cloud metadata endpoints (`/latest/meta-data/`)
+
+### 3. Rate Limiter (`detection/rate_limiter.js`)
+In-memory Node.js/Express middleware using the Token Bucket algorithm.
+- 20 tokens per IP, refills 2 tokens/second
+- Auto-purges inactive IPs after 5 minutes (prevents memory leaks)
+- Returns `429 Too Many Requests` with `Retry-After` header
+
+```javascript
+const rateLimiter = require('./detection/rate_limiter');
+app.use(rateLimiter);
+```
+
+---
+
+## 🔄 Recommended Workflow
+
+```
+Phase 1 — Discover subdomains:
+  $ node scanners/vanguard-dns.js -d target.com -w wordlists/subdomains.txt -o found.json
+
+Phase 2 — Check for subdomain takeover:
+  $ node scanners/echo-takeover.js -l active_domains.txt -o takeover.json
+
+Phase 3 — Audit CORS policies:
+  $ node scanners/specter-cors.js -l active_domains.txt -o cors.json
+
+Phase 4 — Fuzz for hidden files and leaks:
+  $ node scanners/ghost-engine.js -u https://api.target.com -w wordlists/paths.txt -o leaks.json
+```
+
+---
+
+*Disclaimer: This repository is for educational purposes and authorized security testing only. Do not use against targets without explicit written permission.*

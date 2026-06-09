@@ -28,7 +28,7 @@ function parseArgs() {
     const args = process.argv.slice(2);
     const config = {
         targetDomain: '',
-        wordlistPath: './subdomains.txt',
+        wordlistPath: './wordlists/subdomains.txt',
         concurrency: 100,
         dnsServers: ['1.1.1.1', '8.8.8.8', '9.9.9.9'],
         outputFile: '',

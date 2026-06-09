@@ -1,0 +1,15 @@
+# Ignore everything
+*
+
+# Allow our project structure
+!README.md
+!.gitignore
+
+!scanners/
+!scanners/**
+
+!wordlists/
+!wordlists/**
+
+!detection/
+!detection/**

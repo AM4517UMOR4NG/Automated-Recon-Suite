@@ -33,7 +33,7 @@ function parseArgs() {
     const args = process.argv.slice(2);
     const config = {
         targetUrl: '',
-        wordlistPath: './wordlist.txt',
+        wordlistPath: './wordlists/paths.txt',
         concurrency: 50,
         timeoutMs: 8000,
         maxRetries: 2,

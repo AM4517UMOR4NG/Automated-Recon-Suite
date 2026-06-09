@@ -30,7 +30,7 @@ const { URL } = require('url');
 function parseArgs() {
     const args = process.argv.slice(2);
     const config = {
-        domainList: './domains.txt',
+        domainList: './wordlists/domains.txt',
         concurrency: 30,
         timeoutMs: 8000,
         maxRetries: 2,
