@@ -36,5 +36,8 @@ An automated log analyzer configuration that monitors web access logs and issues
 ### 2. ModSecurity WAF Rules (`detection/modsecurity_waf_rules.conf`)
 Web Application Firewall (WAF) rule definitions designed to drop requests with automated scanner User-Agent signatures and access attempts targeting configuration files.
 
+### 3. In-Memory Token Bucket Rate Limiter (`detection/rate_limiter.js`)
+An advanced, lightweight Node.js/Express.js middleware that implements the Token Bucket algorithm to throttle aggressive scanners locally without external dependencies (like Redis). Includes automated memory cleanup.
+
 ---
 *Disclaimer: This repository is for educational purposes and authorized bug bounty hunting only. Do not use against targets without explicit permission.*
