@@ -1,5 +1,8 @@
-api.vidio.com
-staging.vidio.com
-dev.vidio.com
-test.vidio.com
-dashboard.vidio.com
+api.example.com
+staging.target.local
+dev-environment.test
+internal-dashboard.corp
+api.sandbox.xyz
+assets.cdn-provider.test
+legacy-app.company.net
+docs.developer-site.local
