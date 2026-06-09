@@ -5,19 +5,19 @@
 ## Tools Included
 
 ### 1. Ghost Engine (`GHOST_ENGINE_ADVANCED.js`)
-A high-performance, asynchronous vulnerability scanner built in Node.js. Designed to replicate the concurrency and connection pooling capabilities of industry-standard tools (like Nuclei and FFUF) but fully customizable in JavaScript.
+A high-performance, asynchronous vulnerability scanner built in Node.js. Designed to replicate the concurrency and connection pooling capabilities of industry-standard tools (like Nuclei and FFUF).
+- **Features**: Detects sensitive secrets in response bodies using Smart Matchers, TCP Connection Pooling.
+- **Usage**: `node GHOST_ENGINE_ADVANCED.js` (Requires `wordlist.txt`)
 
-**Features:**
-- **TCP Connection Pooling:** Uses `keepAlive` for extreme speed.
-- **Concurrency Limiting:** Safely executes dozens of requests simultaneously without memory leaks.
-- **Smart Matchers:** Uses Regex to detect sensitive secrets in response bodies (e.g., AWS Keys, DB Passwords, JWTs).
-- **Asynchronous Streaming:** Reads massive wordlists without loading them entirely into RAM.
+### 2. Specter CORS Scanner (`SPECTER_CORS_SCANNER.js`)
+An asynchronous scanner designed to detect Cross-Origin Resource Sharing (CORS) misconfigurations across hundreds of subdomains.
+- **Features**: Injects arbitrary origins and validates if `Access-Control-Allow-Credentials: true` is reflected, indicating a critical data theft vulnerability.
+- **Usage**: `node SPECTER_CORS_SCANNER.js` (Requires `domains.txt`)
 
-**Usage:**
-```bash
-node GHOST_ENGINE_ADVANCED.js
-```
-*Note: Make sure to edit the `CONFIG` block inside the script to point to your target and specify your wordlist.*
+### 3. Echo Takeover Scanner (`ECHO_TAKEOVER_SCANNER.js`)
+A fast reconnaissance tool for detecting Subdomain Takeover vulnerabilities. 
+- **Features**: Analyzes HTTP response bodies against a signature database (fingerprints) of known cloud providers (AWS S3, GitHub Pages, Heroku, etc.) to detect dangling DNS records.
+- **Usage**: `node ECHO_TAKEOVER_SCANNER.js` (Requires `domains.txt`)
 
 ---
 *Disclaimer: This repository is for educational purposes and authorized bug bounty hunting only. Do not use against targets without explicit permission.*

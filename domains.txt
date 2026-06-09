@@ -1,0 +1,5 @@
+api.vidio.com
+staging.vidio.com
+dev.vidio.com
+test.vidio.com
+dashboard.vidio.com
