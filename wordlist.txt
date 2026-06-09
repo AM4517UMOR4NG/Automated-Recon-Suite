@@ -1,0 +1,10 @@
+.env
+.git/config
+.git/HEAD
+api/v1/docs
+swagger.json
+swagger-ui.html
+actuator/env
+actuator/health
+config.json
+wp-config.php
