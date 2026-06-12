@@ -12,6 +12,7 @@ Automated-Recon-Suite/
 ├── README.md
 │
 ├── scanners/                          # All offensive scanning tools
+│   ├── crt-harvester.js               # CT log subdomain enumerator (passive recon)
 │   ├── ghost-engine.js                # Directory & config leak scanner
 │   ├── specter-cors.js                # Multi-vector CORS misconfiguration detector
 │   ├── echo-takeover.js               # Subdomain takeover analyzer (DNS-first)
@@ -38,7 +39,35 @@ All scanners share the same architectural foundation:
 - **Controlled concurrency** — semaphore-based queue prevents RAM exhaustion
 - **Exponential backoff retry** on timeout/connection errors
 - **Streamed I/O** — wordlists are read line-by-line, never loaded into memory
-- **Dual output** — real-time console + optional JSON file (`-o`)
+- **Dual output** — real-time console + optional JSON/TXT file (`-o`)
+
+---
+
+### 0. CRT Harvester v1.0 (Passive Recon)
+
+**File:** `scanners/crt-harvester.js`
+**Purpose:** Passively enumerate subdomains from public Certificate Transparency logs via crt.sh. This tool **never contacts the target** — all data comes from publicly logged SSL certificates.
+
+**Built-in presets:**
+| Preset | Domains | Description |
+|---|---|---|
+| `google` | 37 root domains | Full Google/Alphabet portfolio including acquisitions (Fitbit, Waze, Mandiant, Kaggle, etc.) |
+
+**Usage:**
+```bash
+node scanners/crt-harvester.js -d target.com -o target_subs.txt
+node scanners/crt-harvester.js --preset google -o google_all_subs.txt
+node scanners/crt-harvester.js -d example.com,sub.example.com --delay 5000
+```
+
+**All flags:**
+| Flag | Description | Default |
+|---|---|---|
+| `-d, --domains` | Comma-separated root domains | *(required unless using preset)* |
+| `--preset` | Use built-in domain set | *available: `google`* |
+| `-o, --output` | Save subdomains to text file | *console only* |
+| `--delay` | Delay between API calls (ms) | `3000` |
+| `-h, --help` | Show help | — |
 
 ---
 
