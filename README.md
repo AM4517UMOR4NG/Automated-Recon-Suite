@@ -248,4 +248,4 @@ Phase 4 — Fuzz for hidden files and leaks:
 
 ---
 
-*Disclaimer: This repository is for educational purposes and authorized security testing only. Do not use against targets without explicit written permission.*
+*Disclaimer: This repository is for educational purposes and authorized security testing only. Don't use against targets without explicit written permission.*
